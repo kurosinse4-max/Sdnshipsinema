@@ -8,14 +8,57 @@ import urllib.parse
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-# إعداد البوت مع الصلاحيات المطلوبة
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# معرف الروم المحدد لتثبيت اللوحة وتنظيف الشات
 TARGET_CHANNEL_ID = 1567444961442398298
 dashboard_message_id = None
+
+
+class MediaButtons(discord.ui.View):
+
+  def __init__(self, media_id, media_type, title):
+    super().__init__(timeout=180)
+
+    # إرجاع زر Watch لرابط TMDB الأصلي والمضمون
+    watch_url = f"https://www.themoviedb.org/{media_type}/{media_id}"
+
+    # رابط يوتيوب دقيق للـ Trailer مع إيموجي الشاشة المطلوب
+    query_encoded = urllib.parse.quote(f"{title} official trailer")
+    trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
+
+    # رابط Simkl
+    simkl_encoded = urllib.parse.quote(title)
+    simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
+
+    # زر Watch مع الإيموجي ⏹️
+    self.add_item(
+        discord.ui.Button(
+            label="Watch",
+            style=discord.ButtonStyle.link,
+            url=watch_url,
+            emoji="⏹️",
+        )
+    )
+    # زر Trailer مع الإيموجي ▶️
+    self.add_item(
+        discord.ui.Button(
+            label="Trailer",
+            style=discord.ButtonStyle.link,
+            url=trailer_url,
+            emoji="▶️",
+        )
+    )
+    # زر Simkl
+    self.add_item(
+        discord.ui.Button(
+            label="Simkl",
+            style=discord.ButtonStyle.link,
+            url=simkl_url,
+            emoji="🔗",
+        )
+    )
 
 
 class CinemaView(discord.ui.View):
@@ -37,17 +80,37 @@ class CinemaView(discord.ui.View):
       async with session.get(url) as resp:
         if resp.status == 200:
           data = await resp.json()
-          results = data.get("results", [])[:5]
-          embed = discord.Embed(
-              title="🔥 أبرز الأفلام الرائجة اليوم", color=0xE50914
-          )
-          for movie in results:
+          results = data.get("results", [])[:1]  # جلب الفيلم الأول مع غلافه
+          if results:
+            movie = results[0]
             title = movie.get("title") or movie.get("name")
+            overview = movie.get("overview", "لا توجد نبذة.")
             vote = movie.get("vote_average", 0)
-            embed.add_field(
-                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            poster_path = movie.get("poster_path")
+            media_id = movie.get("id")
+            poster_url = (
+                f"https://image.tmdb.org/t/p/w500{poster_path}"
+                if poster_path
+                else "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba"
             )
-          await interaction.followup.send(embed=embed, ephemeral=True)
+
+            embed = discord.Embed(
+                title=f"🔥 الفيلم الرائج: {title}",
+                description=overview[:300] + "...",
+                color=0xE50914,
+            )
+            embed.set_image(url=poster_url)
+            embed.add_field(name="⭐ التقييم", value=f"{vote:.1f}", inline=True)
+            embed.add_field(name="📁 التصنيف", value="MOVIE", inline=True)
+
+            view = MediaButtons(media_id, "movie", title)
+            await interaction.followup.send(
+                embed=embed, view=view, ephemeral=True
+            )
+          else:
+            await interaction.followup.send(
+                "❌ لا توجد نتائج حالياً.", ephemeral=True
+            )
         else:
           await interaction.followup.send(
               "❌ حدث خطأ أثناء جلب الأفلام الرائجة.", ephemeral=True
@@ -67,17 +130,37 @@ class CinemaView(discord.ui.View):
       async with session.get(url) as resp:
         if resp.status == 200:
           data = await resp.json()
-          results = data.get("results", [])[:5]
-          embed = discord.Embed(
-              title="📺 أبرز المسلسلات الرائجة اليوم", color=0x1F8B4C
-          )
-          for tv in results:
+          results = data.get("results", [])[:1]
+          if results:
+            tv = results[0]
             title = tv.get("name")
+            overview = tv.get("overview", "لا توجد نبذة.")
             vote = tv.get("vote_average", 0)
-            embed.add_field(
-                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            poster_path = tv.get("poster_path")
+            media_id = tv.get("id")
+            poster_url = (
+                f"https://image.tmdb.org/t/p/w500{poster_path}"
+                if poster_path
+                else "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba"
             )
-          await interaction.followup.send(embed=embed, ephemeral=True)
+
+            embed = discord.Embed(
+                title=f"📺 المسلسل الرائج: {title}",
+                description=overview[:300] + "...",
+                color=0x1F8B4C,
+            )
+            embed.set_image(url=poster_url)
+            embed.add_field(name="⭐ التقييم", value=f"{vote:.1f}", inline=True)
+            embed.add_field(name="📁 التصنيف", value="TV", inline=True)
+
+            view = MediaButtons(media_id, "tv", title)
+            await interaction.followup.send(
+                embed=embed, view=view, ephemeral=True
+            )
+          else:
+            await interaction.followup.send(
+                "❌ لا توجد نتائج حالياً.", ephemeral=True
+            )
         else:
           await interaction.followup.send(
               "❌ حدث خطأ أثناء جلب المسلسلات الرائجة.", ephemeral=True
@@ -95,69 +178,41 @@ class CinemaView(discord.ui.View):
       async with session.get(url) as resp:
         if resp.status == 200:
           data = await resp.json()
-          results = data.get("results", [])[:5]
-          embed = discord.Embed(
-              title="🌸 أبرز أعمال الأنمي الرائجة", color=0x2ECC71
-          )
-          for anime in results:
+          results = data.get("results", [])[:1]
+          if results:
+            anime = results[0]
             title = anime.get("name")
+            overview = anime.get("overview", "لا توجد نبذة.")
             vote = anime.get("vote_average", 0)
-            embed.add_field(
-                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            poster_path = anime.get("poster_path")
+            media_id = anime.get("id")
+            poster_url = (
+                f"https://image.tmdb.org/t/p/w500{poster_path}"
+                if poster_path
+                else "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba"
             )
-          await interaction.followup.send(embed=embed, ephemeral=True)
+
+            embed = discord.Embed(
+                title=f"🌸 الأنمي الرائج: {title}",
+                description=overview[:300] + "...",
+                color=0x2ECC71,
+            )
+            embed.set_image(url=poster_url)
+            embed.add_field(name="⭐ التقييم", value=f"{vote:.1f}", inline=True)
+            embed.add_field(name="📁 التصنيف", value="ANIME", inline=True)
+
+            view = MediaButtons(media_id, "tv", title)
+            await interaction.followup.send(
+                embed=embed, view=view, ephemeral=True
+            )
+          else:
+            await interaction.followup.send(
+                "❌ لا توجد نتائج حالياً.", ephemeral=True
+            )
         else:
           await interaction.followup.send(
               "❌ حدث خطأ أثناء جلب الأنمي.", ephemeral=True
           )
-
-
-class MediaButtons(discord.ui.View):
-
-  def __init__(self, media_id, media_type, title):
-    super().__init__(timeout=180)
-
-    # رابط المشغل المباشر (Vidsrc) لكي يحضر الزول الفيلم أو المسلسل فوراً
-    if media_type == "tv" or media_type == "anime":
-      watch_url = f"https://vidsrc.xyz/embed/tv?tmdb={media_id}"
-    else:
-      watch_url = f"https://vidsrc.xyz/embed/movie?tmdb={media_id}"
-
-    # رابط يوتيوب دقيق للـ Trailer مع اسم العمل
-    query_encoded = urllib.parse.quote(f"{title} official trailer")
-    trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
-
-    # رابط Simkl للبحث عن العمل
-    simkl_encoded = urllib.parse.quote(title)
-    simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
-
-    # زر المشاهدة مع الإيموجي المطلوب ⏹️
-    self.add_item(
-        discord.ui.Button(
-            label="Watch",
-            style=discord.ButtonStyle.link,
-            url=watch_url,
-            emoji="⏹️",
-        )
-    )
-    # زر إعلان اليوتيوب مع الإيموجي المخصص
-    self.add_item(
-        discord.ui.Button(
-            label="Trailer",
-            style=discord.ButtonStyle.link,
-            url=trailer_url,
-            emoji="▶️",
-        )
-    )
-    # زر Simkl
-    self.add_item(
-        discord.ui.Button(
-            label="Simkl",
-            style=discord.ButtonStyle.link,
-            url=simkl_url,
-            emoji="🔗",
-        )
-    )
 
 
 @bot.event
@@ -198,7 +253,7 @@ async def on_message(message):
   if message.channel.id == TARGET_CHANNEL_ID:
     await bot.process_commands(message)
 
-    # التنظيف التلقائي بعد دقيقتين
+    # التنظيف التلقائي للشات بعد دقيقتين
     await asyncio.sleep(120)
     try:
       if message.id != dashboard_message_id:
