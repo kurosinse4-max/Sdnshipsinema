@@ -21,18 +21,20 @@ class MediaButtons(discord.ui.View):
   def __init__(self, media_id, media_type, title):
     super().__init__(timeout=180)
 
-    # إرجاع زر Watch لرابط TMDB الأصلي والمضمون
-    watch_url = f"https://www.themoviedb.org/{media_type}/{media_id}"
+    # استخدام النطاق البديل والمستقر vidsrc.to للتشغيل الفوري
+    if media_type == "tv" or media_type == "anime":
+      watch_url = f"https://vidsrc.to/embed/tv?tmdb={media_id}"
+    else:
+      watch_url = f"https://vidsrc.to/embed/movie?tmdb={media_id}"
 
-    # رابط يوتيوب دقيق للـ Trailer مع إيموجي الشاشة المطلوب
     query_encoded = urllib.parse.quote(f"{title} official trailer")
     trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
 
-    # رابط Simkl
     simkl_encoded = urllib.parse.quote(title)
     simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
+    tmdb_url = f"https://www.themoviedb.org/{media_type}/{media_id}"
 
-    # زر Watch مع الإيموجي ⏹️
+    # 1. Watch
     self.add_item(
         discord.ui.Button(
             label="Watch",
@@ -41,7 +43,7 @@ class MediaButtons(discord.ui.View):
             emoji="⏹️",
         )
     )
-    # زر Trailer مع الإيموجي ▶️
+    # 2. Trailer
     self.add_item(
         discord.ui.Button(
             label="Trailer",
@@ -50,13 +52,22 @@ class MediaButtons(discord.ui.View):
             emoji="▶️",
         )
     )
-    # زر Simkl
+    # 3. Simkl
     self.add_item(
         discord.ui.Button(
             label="Simkl",
             style=discord.ButtonStyle.link,
             url=simkl_url,
             emoji="🔗",
+        )
+    )
+    # 4. TMDB
+    self.add_item(
+        discord.ui.Button(
+            label="TMDB",
+            style=discord.ButtonStyle.link,
+            url=tmdb_url,
+            emoji="🌐",
         )
     )
 
@@ -80,7 +91,7 @@ class CinemaView(discord.ui.View):
       async with session.get(url) as resp:
         if resp.status == 200:
           data = await resp.json()
-          results = data.get("results", [])[:1]  # جلب الفيلم الأول مع غلافه
+          results = data.get("results", [])[:1]
           if results:
             movie = results[0]
             title = movie.get("title") or movie.get("name")
@@ -253,7 +264,6 @@ async def on_message(message):
   if message.channel.id == TARGET_CHANNEL_ID:
     await bot.process_commands(message)
 
-    # التنظيف التلقائي للشات بعد دقيقتين
     await asyncio.sleep(120)
     try:
       if message.id != dashboard_message_id:
@@ -325,7 +335,6 @@ async def movie_search(ctx, *, query: str = None):
         view = MediaButtons(media_id, media_type, title)
         result_msg = await ctx.send(embed=embed, view=view)
 
-        # حذف نتيجة البحث بعد دقيقتين تلقائياً لتنظيف الشات
         await asyncio.sleep(120)
         try:
           await result_msg.delete()
