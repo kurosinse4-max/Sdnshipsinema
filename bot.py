@@ -3,6 +3,7 @@ import os
 import discord
 from discord.ext import commands
 import aiohttp
+import urllib.parse
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
@@ -89,7 +90,6 @@ class CinemaView(discord.ui.View):
       self, interaction: discord.Interaction, button: discord.ui.Button
   ):
     await interaction.response.defer(ephemeral=True)
-    # استخدام الـ TMDB للبحث عن أعمال الأنمي الرائجة
     url = f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&with_genres=16&sort_by=popularity.desc"
     async with aiohttp.ClientSession() as session:
       async with session.get(url) as resp:
@@ -114,22 +114,39 @@ class CinemaView(discord.ui.View):
 
 class MediaButtons(discord.ui.View):
 
-  def __init__(self, media_id, media_type):
+  def __init__(self, media_id, media_type, title):
     super().__init__(timeout=180)
-    # زر المشاهدة
+
+    # رابط المشغل المباشر (Vidsrc)
+    if media_type == "tv" or media_type == "anime":
+      watch_url = f"https://vidsrc.xyz/embed/tv?tmdb={media_id}"
+    else:
+      watch_url = f"https://vidsrc.xyz/embed/movie?tmdb={media_id}"
+
+    # رابط يوتيوب دقيق للـ Trailer مع اسم العمل
+    query_encoded = urllib.parse.quote(f"{title} official trailer")
+    trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
+
+    # رابط Simkl للبحث عن العمل
+    simkl_encoded = urllib.parse.quote(title)
+    simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
+
+    # زر المشاهدة المباشرة
     self.add_item(
         discord.ui.Button(
             label="Watch",
             style=discord.ButtonStyle.link,
-            url=f"https://www.themoviedb.org/{media_type}/{media_id}",
+            url=watch_url,
+            emoji="▶️",
         )
     )
-    # زر الإعلان الترويجي
+    # زر إعلان اليوتيوب
     self.add_item(
         discord.ui.Button(
             label="Trailer",
             style=discord.ButtonStyle.link,
-            url=f"https://www.youtube.com/results?search_query=trailer",
+            url=trailer_url,
+            emoji="📺",
         )
     )
     # زر Simkl
@@ -137,7 +154,8 @@ class MediaButtons(discord.ui.View):
         discord.ui.Button(
             label="Simkl",
             style=discord.ButtonStyle.link,
-            url=f"https://simkl.com/search/?q={media_id}",
+            url=simkl_url,
+            emoji="🔗",
         )
     )
 
@@ -148,10 +166,10 @@ async def on_ready():
   bot.add_view(CinemaView())
   channel = bot.get_channel(TARGET_CHANNEL_ID)
   if channel:
-    # مسح الرسائل القديمة في الروم عند الإقلاع وتثبيت لوحة جديدة نظيفة
     try:
+      # تنظيف الشات بالكامل ما عدا الرسائل المثبتة عند التشغيل
       await channel.purge(
-          limit=10, check=lambda m: m.author == bot.user and not m.pinned
+          limit=50, check=lambda m: m.id != dashboard_message_id and not m.pinned
       )
     except Exception:
       pass
@@ -178,12 +196,13 @@ async def on_message(message):
   if message.author.bot:
     return
 
-  # تنظيف الشات تلقائياً في الروم المحددة إذا كانت الرسالة ليست لوحة التحكم
   if message.channel.id == TARGET_CHANNEL_ID:
     await bot.process_commands(message)
-    # انتظار دقيقتين ثم حذف الرسالة غير المرغوب فيها لتنظيف الروم
+
+    # نظام التنظيف الذكي: مراقبة الشات، إذا مررت دقيقتين ولم يحدث تفاعل جديد، يتم حذف رسائل الأعضاء وتنظيف الشات مع الإبقاء على لوحة التحكم فقط
     await asyncio.sleep(120)
     try:
+      # التحقق من أن الرسالة المراد حذفها ليست هي لوحة التحكم
       if message.id != dashboard_message_id:
         await message.delete()
     except Exception:
@@ -235,7 +254,7 @@ async def movie_search(ctx, *, query: str = None):
         embed.add_field(name="⭐ التقييم", value=f"{vote:.1f}", inline=True)
         embed.add_field(name="📁 التصنيف", value=media_type.upper(), inline=True)
 
-        view = MediaButtons(media_id, media_type)
+        view = MediaButtons(media_id, media_type, title)
         await ctx.send(embed=embed, view=view)
       else:
         await ctx.send("❌ حدث خطأ في الاتصال بقاعدة بيانات الأفلام.")
