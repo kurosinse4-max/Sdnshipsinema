@@ -1,92 +1,244 @@
+import asyncio
 import os
-import aiohttp
 import discord
 from discord.ext import commands
+import aiohttp
 
-intents = discord.Intents.default()
-intents.message_content = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
+# إعداد البوت مع الصلاحيات المطلوبة
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# معرف الروم المحدد لتثبيت اللوحة وتنظيف الشات
+TARGET_CHANNEL_ID = 1567444961442398298
+dashboard_message_id = None
+
+
 class CinemaView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
 
-    @discord.ui.button(label="Trending Movies", style=discord.ButtonStyle.danger, emoji="🔥")
-    async def trending_movies(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(thinking=True)
-        url = f"https://api.themoviedb.org/3/trending/movie/day?api_key={TMDB_API_KEY}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send("❌ عذراً، حدث خطأ في جلب الأفلام الرائجة.", ephemeral=True)
-                    return
-                data = await resp.json()
-                results = data.get("results", [])[:5]
-                
-                desc = ""
-                for m in results:
-                    desc += f"🎬 **{m.get('title')}** (⭐ {m.get('vote_average')})\n"
-                
-                embed = discord.Embed(title="🔥 أبرز الأفلام الرائجة اليوم", description=desc, color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+  def __init__(self):
+    super().__init__(timeout=None)
 
-    @discord.ui.button(label="Trending TV", style=discord.ButtonStyle.primary, emoji="📺")
-    async def trending_tv(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(thinking=True)
-        url = f"https://api.themoviedb.org/3/trending/tv/day?api_key={TMDB_API_KEY}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send("❌ عذراً، حدث خطأ في جلب المسلسلات الرائجة.", ephemeral=True)
-                    return
-                data = await resp.json()
-                results = data.get("results", [])[:5]
-                
-                desc = ""
-                for m in results:
-                    desc += f"📺 **{m.get('name')}** (⭐ {m.get('vote_average')})\n"
-                
-                embed = discord.Embed(title="📺 أبرز المسلسلات الرائجة اليوم", description=desc, color=discord.Color.blue())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+  @discord.ui.button(
+      label="🔥 Trending Movies",
+      style=discord.ButtonStyle.danger,
+      custom_id="trending_movies",
+  )
+  async def trending_movies(
+      self, interaction: discord.Interaction, button: discord.ui.Button
+  ):
+    await interaction.response.defer(ephemeral=True)
+    url = f"https://api.themoviedb.org/3/trending/movie/day?api_key={TMDB_API_KEY}"
+    async with aiohttp.ClientSession() as session:
+      async with session.get(url) as resp:
+        if resp.status == 200:
+          data = await resp.json()
+          results = data.get("results", [])[:5]
+          embed = discord.Embed(
+              title="🔥 أبرز الأفلام الرائجة اليوم", color=0xE50914
+          )
+          for movie in results:
+            title = movie.get("title") or movie.get("name")
+            vote = movie.get("vote_average", 0)
+            embed.add_field(
+                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            )
+          await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+          await interaction.followup.send(
+              "❌ حدث خطأ أثناء جلب الأفلام الرائجة.", ephemeral=True
+          )
 
-    @discord.ui.button(label="Anime", style=discord.ButtonStyle.success, emoji="🍥")
-    async def anime_list(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(thinking=True)
-        url = f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&with_genres=16"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send("❌ عذراً، حدث خطأ في جلب قائمة الأنمي.", ephemeral=True)
-                    return
-                data = await resp.json()
-                results = data.get("results", [])[:5]
-                
-                desc = ""
-                for m in results:
-                    desc += f"🍥 **{m.get('name')}** (⭐ {m.get('vote_average')})\n"
-                
-                embed = discord.Embed(title="🍥 أحدث مسلسلات الأنمي", description=desc, color=discord.Color.green())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+  @discord.ui.button(
+      label="📺 Trending TV",
+      style=discord.ButtonStyle.primary,
+      custom_id="trending_tv",
+  )
+  async def trending_tv(
+      self, interaction: discord.Interaction, button: discord.ui.Button
+  ):
+    await interaction.response.defer(ephemeral=True)
+    url = f"https://api.themoviedb.org/3/trending/tv/day?api_key={TMDB_API_KEY}"
+    async with aiohttp.ClientSession() as session:
+      async with session.get(url) as resp:
+        if resp.status == 200:
+          data = await resp.json()
+          results = data.get("results", [])[:5]
+          embed = discord.Embed(
+              title="📺 أبرز المسلسلات الرائجة اليوم", color=0x1F8B4C
+          )
+          for tv in results:
+            title = tv.get("name")
+            vote = tv.get("vote_average", 0)
+            embed.add_field(
+                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            )
+          await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+          await interaction.followup.send(
+              "❌ حدث خطأ أثناء جلب المسلسلات الرائجة.", ephemeral=True
+          )
+
+  @discord.ui.button(
+      label="🌸 Anime", style=discord.ButtonStyle.success, custom_id="trending_anime"
+  )
+  async def trending_anime(
+      self, interaction: discord.Interaction, button: discord.ui.Button
+  ):
+    await interaction.response.defer(ephemeral=True)
+    # استخدام الـ TMDB للبحث عن أعمال الأنمي الرائجة
+    url = f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&with_genres=16&sort_by=popularity.desc"
+    async with aiohttp.ClientSession() as session:
+      async with session.get(url) as resp:
+        if resp.status == 200:
+          data = await resp.json()
+          results = data.get("results", [])[:5]
+          embed = discord.Embed(
+              title="🌸 أبرز أعمال الأنمي الرائجة", color=0x2ECC71
+          )
+          for anime in results:
+            title = anime.get("name")
+            vote = anime.get("vote_average", 0)
+            embed.add_field(
+                name=title, value=f"⭐ التقييم: {vote:.1f}", inline=False
+            )
+          await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+          await interaction.followup.send(
+              "❌ حدث خطأ أثناء جلب الأنمي.", ephemeral=True
+          )
+
+
+class MediaButtons(discord.ui.View):
+
+  def __init__(self, media_id, media_type):
+    super().__init__(timeout=180)
+    # زر المشاهدة
+    self.add_item(
+        discord.ui.Button(
+            label="Watch",
+            style=discord.ButtonStyle.link,
+            url=f"https://www.themoviedb.org/{media_type}/{media_id}",
+        )
+    )
+    # زر الإعلان الترويجي
+    self.add_item(
+        discord.ui.Button(
+            label="Trailer",
+            style=discord.ButtonStyle.link,
+            url=f"https://www.youtube.com/results?search_query=trailer",
+        )
+    )
+    # زر Simkl
+    self.add_item(
+        discord.ui.Button(
+            label="Simkl",
+            style=discord.ButtonStyle.link,
+            url=f"https://simkl.com/search/?q={media_id}",
+        )
+    )
+
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name}")
+  print(f"Logged in as {bot.user.name}")
+  bot.add_view(CinemaView())
+  channel = bot.get_channel(TARGET_CHANNEL_ID)
+  if channel:
+    # مسح الرسائل القديمة في الروم عند الإقلاع وتثبيت لوحة جديدة نظيفة
+    try:
+      await channel.purge(
+          limit=10, check=lambda m: m.author == bot.user and not m.pinned
+      )
+    except Exception:
+      pass
 
-@bot.command(name="movie", help="إرسال لوحة التحكم الخاصة بالسينما")
-async def movie_panel(ctx):
     embed = discord.Embed(
-        title="SUDANSHIP-CINEMA 🎬",
-        description="مرحباً بك في | SUDANSHIP-CINEMA ، لوحة التحكم الموحدة لاكتشاف ومشاهدة الأفلام، المسلسلات، والأنمي 🎞️",
-        color=discord.Color.gold()
+        title="🎬 SUDANSHIP-CINEMA",
+        description=(
+            "اختر أحد التصنيفات أدناه لتصفح أحدث الأفلام والمسلسلات والأنمي:"
+        ),
+        color=0xE50914,
     )
-    embed.set_image(url="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800")
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba"
+    )
     embed.set_footer(text="Powered by TMDB & SUDANSHIP")
-    
-    await ctx.send(embed=embed, view=CinemaView())
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-if TOKEN:
-    bot.run(TOKEN)
+    global dashboard_message_id
+    msg = await channel.send(embed=embed, view=CinemaView())
+    dashboard_message_id = msg.id
+
+
+@bot.event
+async def on_message(message):
+  if message.author.bot:
+    return
+
+  # تنظيف الشات تلقائياً في الروم المحددة إذا كانت الرسالة ليست لوحة التحكم
+  if message.channel.id == TARGET_CHANNEL_ID:
+    await bot.process_commands(message)
+    # انتظار دقيقتين ثم حذف الرسالة غير المرغوب فيها لتنظيف الروم
+    await asyncio.sleep(120)
+    try:
+      if message.id != dashboard_message_id:
+        await message.delete()
+    except Exception:
+      pass
+    return
+
+  await bot.process_commands(message)
+
+
+@bot.command(name="movie")
+async def movie_search(ctx, *, query: str = None):
+  if not query:
+    embed = discord.Embed(
+        title="🎬 SUDANSHIP-CINEMA",
+        description="استخدم الأمر هكذا: `!movie اسم الفيلم أو المسلسل`",
+        color=0xE50914,
+    )
+    await ctx.send(embed=embed, delete_after=10)
+    return
+
+  url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={query}"
+  async with aiohttp.ClientSession() as session:
+    async with session.get(url) as resp:
+      if resp.status == 200:
+        data = await resp.json()
+        results = data.get("results", [])
+        if not results:
+          await ctx.send("❌ عذراً، لم يتم العثور على نتائج مطابقة.", delete_after=10)
+          return
+
+        item = results[0]
+        title = item.get("title") or item.get("name", "بدون عنوان")
+        overview = item.get("overview", "لا توجد نبذة متوفرة.")
+        vote = item.get("vote_average", 0)
+        poster_path = item.get("poster_path")
+        media_type = item.get("media_type", "movie")
+        media_id = item.get("id")
+
+        poster_url = (
+            f"https://image.tmdb.org/t/p/w500{poster_path}"
+            if poster_path
+            else "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba"
+        )
+
+        embed = discord.Embed(
+            title=title, description=overview[:300] + "...", color=0xE50914
+        )
+        embed.set_image(url=poster_url)
+        embed.add_field(name="⭐ التقييم", value=f"{vote:.1f}", inline=True)
+        embed.add_field(name="📁 التصنيف", value=media_type.upper(), inline=True)
+
+        view = MediaButtons(media_id, media_type)
+        await ctx.send(embed=embed, view=view)
+      else:
+        await ctx.send("❌ حدث خطأ في الاتصال بقاعدة بيانات الأفلام.")
+
+
+bot.run(DISCORD_TOKEN)
