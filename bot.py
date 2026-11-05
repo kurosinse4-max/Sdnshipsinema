@@ -117,28 +117,39 @@ class MediaButtons(discord.ui.View):
   def __init__(self, media_id, media_type, title):
     super().__init__(timeout=180)
 
-    simkl_encoded = urllib.parse.quote(title)
-    watch_url = f"https://simkl.com/search/?q={simkl_encoded}"
+    # رابط المشغل المباشر (Vidsrc) لكي يحضر الزول الفيلم أو المسلسل فوراً
+    if media_type == "tv" or media_type == "anime":
+      watch_url = f"https://vidsrc.xyz/embed/tv?tmdb={media_id}"
+    else:
+      watch_url = f"https://vidsrc.xyz/embed/movie?tmdb={media_id}"
+
+    # رابط يوتيوب دقيق للـ Trailer مع اسم العمل
     query_encoded = urllib.parse.quote(f"{title} official trailer")
     trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
+
+    # رابط Simkl للبحث عن العمل
+    simkl_encoded = urllib.parse.quote(title)
     simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
 
+    # زر المشاهدة مع الإيموجي المطلوب ⏹️
     self.add_item(
         discord.ui.Button(
             label="Watch",
             style=discord.ButtonStyle.link,
             url=watch_url,
-            emoji="▶️",
+            emoji="⏹️",
         )
     )
+    # زر إعلان اليوتيوب مع الإيموجي المخصص
     self.add_item(
         discord.ui.Button(
             label="Trailer",
             style=discord.ButtonStyle.link,
             url=trailer_url,
-            emoji="📺",
+            emoji="▶️",
         )
     )
+    # زر Simkl
     self.add_item(
         discord.ui.Button(
             label="Simkl",
@@ -157,7 +168,6 @@ async def on_ready():
   if channel:
     global dashboard_message_id
     try:
-      # تنظيف الشات بالكامل عند التشغيل مع الاحتفاظ بلوحة التحكم إن وجدت
       await channel.purge(
           limit=50, check=lambda m: m.id != dashboard_message_id and not m.pinned
       )
@@ -186,10 +196,9 @@ async def on_message(message):
     return
 
   if message.channel.id == TARGET_CHANNEL_ID:
-    # معالجة الأوامر أولاً
     await bot.process_commands(message)
 
-    # الانتظار دقيقتين ثم حذف رسالة العضو (مثل أمر البحث) لتنظيف الروم بالكامل
+    # التنظيف التلقائي بعد دقيقتين
     await asyncio.sleep(120)
     try:
       if message.id != dashboard_message_id:
@@ -203,7 +212,6 @@ async def on_message(message):
 
 @bot.command(name="movie")
 async def movie_search(ctx, *, query: str = None):
-  # حذف رسالة الأمر الخاصة بالمستخدم فوراً أو بعد قليل لتظل الروم نظيفة
   try:
     await ctx.message.delete()
   except Exception:
@@ -262,7 +270,7 @@ async def movie_search(ctx, *, query: str = None):
         view = MediaButtons(media_id, media_type, title)
         result_msg = await ctx.send(embed=embed, view=view)
 
-        # جدولة حذف نتيجة البحث (مثل بوست Bad Boys) بعد دقيقتين تلقائياً لتنظيف الشات
+        # حذف نتيجة البحث بعد دقيقتين تلقائياً لتنظيف الشات
         await asyncio.sleep(120)
         try:
           await result_msg.delete()
