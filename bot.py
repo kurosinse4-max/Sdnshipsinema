@@ -117,21 +117,12 @@ class MediaButtons(discord.ui.View):
   def __init__(self, media_id, media_type, title):
     super().__init__(timeout=180)
 
-    # رابط المشغل المباشر (Vidsrc)
-    if media_type == "tv" or media_type == "anime":
-      watch_url = f"https://vidsrc.xyz/embed/tv?tmdb={media_id}"
-    else:
-      watch_url = f"https://vidsrc.xyz/embed/movie?tmdb={media_id}"
-
-    # رابط يوتيوب دقيق للـ Trailer مع اسم العمل
+    simkl_encoded = urllib.parse.quote(title)
+    watch_url = f"https://simkl.com/search/?q={simkl_encoded}"
     query_encoded = urllib.parse.quote(f"{title} official trailer")
     trailer_url = f"https://www.youtube.com/results?search_query={query_encoded}"
-
-    # رابط Simkl للبحث عن العمل
-    simkl_encoded = urllib.parse.quote(title)
     simkl_url = f"https://simkl.com/search/?q={simkl_encoded}"
 
-    # زر المشاهدة المباشرة
     self.add_item(
         discord.ui.Button(
             label="Watch",
@@ -140,7 +131,6 @@ class MediaButtons(discord.ui.View):
             emoji="▶️",
         )
     )
-    # زر إعلان اليوتيوب
     self.add_item(
         discord.ui.Button(
             label="Trailer",
@@ -149,7 +139,6 @@ class MediaButtons(discord.ui.View):
             emoji="📺",
         )
     )
-    # زر Simkl
     self.add_item(
         discord.ui.Button(
             label="Simkl",
@@ -166,8 +155,9 @@ async def on_ready():
   bot.add_view(CinemaView())
   channel = bot.get_channel(TARGET_CHANNEL_ID)
   if channel:
+    global dashboard_message_id
     try:
-      # تنظيف الشات بالكامل ما عدا الرسائل المثبتة عند التشغيل
+      # تنظيف الشات بالكامل عند التشغيل مع الاحتفاظ بلوحة التحكم إن وجدت
       await channel.purge(
           limit=50, check=lambda m: m.id != dashboard_message_id and not m.pinned
       )
@@ -186,7 +176,6 @@ async def on_ready():
     )
     embed.set_footer(text="Powered by TMDB & SUDANSHIP")
 
-    global dashboard_message_id
     msg = await channel.send(embed=embed, view=CinemaView())
     dashboard_message_id = msg.id
 
@@ -197,12 +186,12 @@ async def on_message(message):
     return
 
   if message.channel.id == TARGET_CHANNEL_ID:
+    # معالجة الأوامر أولاً
     await bot.process_commands(message)
 
-    # نظام التنظيف الذكي: مراقبة الشات، إذا مررت دقيقتين ولم يحدث تفاعل جديد، يتم حذف رسائل الأعضاء وتنظيف الشات مع الإبقاء على لوحة التحكم فقط
+    # الانتظار دقيقتين ثم حذف رسالة العضو (مثل أمر البحث) لتنظيف الروم بالكامل
     await asyncio.sleep(120)
     try:
-      # التحقق من أن الرسالة المراد حذفها ليست هي لوحة التحكم
       if message.id != dashboard_message_id:
         await message.delete()
     except Exception:
@@ -214,13 +203,24 @@ async def on_message(message):
 
 @bot.command(name="movie")
 async def movie_search(ctx, *, query: str = None):
+  # حذف رسالة الأمر الخاصة بالمستخدم فوراً أو بعد قليل لتظل الروم نظيفة
+  try:
+    await ctx.message.delete()
+  except Exception:
+    pass
+
   if not query:
     embed = discord.Embed(
         title="🎬 SUDANSHIP-CINEMA",
         description="استخدم الأمر هكذا: `!movie اسم الفيلم أو المسلسل`",
         color=0xE50914,
     )
-    await ctx.send(embed=embed, delete_after=10)
+    msg_err = await ctx.send(embed=embed)
+    await asyncio.sleep(10)
+    try:
+      await msg_err.delete()
+    except Exception:
+      pass
     return
 
   url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={query}"
@@ -230,7 +230,12 @@ async def movie_search(ctx, *, query: str = None):
         data = await resp.json()
         results = data.get("results", [])
         if not results:
-          await ctx.send("❌ عذراً، لم يتم العثور على نتائج مطابقة.", delete_after=10)
+          msg_err = await ctx.send("❌ عذراً، لم يتم العثور على نتائج مطابقة.")
+          await asyncio.sleep(10)
+          try:
+            await msg_err.delete()
+          except Exception:
+            pass
           return
 
         item = results[0]
@@ -255,9 +260,21 @@ async def movie_search(ctx, *, query: str = None):
         embed.add_field(name="📁 التصنيف", value=media_type.upper(), inline=True)
 
         view = MediaButtons(media_id, media_type, title)
-        await ctx.send(embed=embed, view=view)
+        result_msg = await ctx.send(embed=embed, view=view)
+
+        # جدولة حذف نتيجة البحث (مثل بوست Bad Boys) بعد دقيقتين تلقائياً لتنظيف الشات
+        await asyncio.sleep(120)
+        try:
+          await result_msg.delete()
+        except Exception:
+          pass
       else:
-        await ctx.send("❌ حدث خطأ في الاتصال بقاعدة بيانات الأفلام.")
+        msg_err = await ctx.send("❌ حدث خطأ في الاتصال بقاعدة بيانات الأفلام.")
+        await asyncio.sleep(10)
+        try:
+          await msg_err.delete()
+        except Exception:
+          pass
 
 
 bot.run(DISCORD_TOKEN)
